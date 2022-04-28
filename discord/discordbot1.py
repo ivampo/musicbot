@@ -24,7 +24,7 @@ bot = Bot(command_prefix='!#')
 bot.remove_command("help")
 TOKEN = getenv('BOT_TOKEN')  # подставить свой
 YANDEX_TOKEN = getenv('YANDEX_TOKEN')  # подставить свой, функция с погодой работает, только у меня кончился токен
-RAPID_TOKEN = getenv('RAPID_TOKEN')  # подставить свой
+RAPID_TOKEN = getenv('RAPID_TOKEN')
 
 if not TOKEN:
     exit('Error: no token provided')
