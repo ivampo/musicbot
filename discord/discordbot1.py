@@ -17,20 +17,19 @@ from os import getenv
 from sys import exit
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+# бот готов, качество музыки не на высоте, но пойдёт
 
-
-load_dotenv()
+load_dotenv()  # для загрузки токенов из окружения
 bot = Bot(command_prefix='!#')
 bot.remove_command("help")
 TOKEN = getenv('BOT_TOKEN')  # подставить свой
 YANDEX_TOKEN = getenv('YANDEX_TOKEN')  # подставить свой, функция с погодой работает, только у меня кончился токен
-RAPID_TOKEN = getenv('RAPID_TOKEN')
+RAPID_TOKEN = getenv('RAPID_TOKEN')  # подставить свой
 
 if not TOKEN:
     exit('Error: no token provided')
 dashes = ['\u2680', '\u2681', '\u2682', '\u2683', '\u2684', '\u2685']
 bots = {}
-
 
 # ------------------------------------------------------------------
 
@@ -193,7 +192,6 @@ class LanguageThings(commands.Cog):
             'x-rapidapi-host': "translated-mymemory---translation-memory.p.rapidapi.com"
         }
         response = requests.request("GET", url, headers=headers, params=querystring).json()
-        print(response)
         await ctx.send(response['responseData']['translatedText'])
 
 
@@ -204,7 +202,7 @@ class LanguageThings(commands.Cog):
 class MusicThings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.YDL_OPTIONS = {'format': 'bestaudio/best',
+        self.YDL_OPTIONS = {'format': 'bestaudio',
                             'simulate': 'True', 'preferredquality': '192',
                             'preferredcodec': 'mp3', 'key': 'FFmpegExtractAudio'}
         self.FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -239,102 +237,95 @@ class MusicThings(commands.Cog):
             await ctx.send('Чтобы включить треки, необходимо находиться в каком-то голосовом канале')
             return False
 
-    @commands.command(name='start')
+    @commands.command(name='start')  # можно запускать бота вручную, а вообще она сама запускается при функциях
     async def start(self, ctx):
         if self.started.get(ctx.guild.id):
             await ctx.send('Я уже запущен ;)')
         self.started[ctx.guild.id] = True
         self.queue[ctx.guild.id] = []
-        self.track[ctx.guild.id] = [] # изменить на список с ссылкой и названием, быстрее в 10 раз
+        self.track[ctx.guild.id] = []
         self.play_choose[ctx.guild.id] = {}
         self.redacting[ctx.guild.id] = {}
 
-    @commands.command(name='resume_music')
+    @commands.command(name='resume')
     async def resume_channel_music(self, ctx):
         if not self.started.get(ctx.guild.id):
             await self.start(ctx)
         self.voices[ctx.guild.id].resume()
+        await ctx.send('Проигрывание возобновлено')
 
-    @commands.command(name="pause_music")
+    @commands.command(name="pause")
     async def pause_channel_music(self, ctx):
         if not self.started.get(ctx.guild.id):
             await self.start(ctx)
         self.voices[ctx.guild.id].pause()
-
-    @commands.command(name='stop_music')
-    async def stop_channel_music(self, ctx):
-        if not self.started.get(ctx.guild.id):
-            await self.start(ctx)
-        self.voices[ctx.guild.id].stop()
+        await ctx.send('Проигрывание приостановлено')
 
     @commands.command(name='play')
     async def play_channel_music(self, ctx, *track, next=False, hide=False):
         try:
             a = self.voices[ctx.guild.id].is_connected()
             if not a:
-                await self.connect_channel(ctx)
-        except Exception:
-            await self.connect_channel(ctx)
-        """print('----')
-        print(track[0])
-        print(len(track), 'https://www.youtube.com/watch' in track[0])
-        print('------')
-        print(track)"""
-        if len(track) == 1 and 'https://www.youtube.com/watch' in track[0]:
-            track = track[0]
-            print(self.voices[ctx.guild.id].is_playing())
-            if self.voices[ctx.guild.id].is_playing() and not next:
-                with YoutubeDL(self.YDL_OPTIONS) as ydl:
-                    info = ydl.extract_info(track, download=False)
-                if 'entries' in info:
-                    for i in info['entries']:
-                        self.queue[ctx.guild.id].append([f'https://www.youtube.com/watch?v={i["id"]}', i["title"]])
-                        await ctx.send(f'{len(info["entries"])} треков было добавлено в очередь')
-                else:
-                    self.queue[ctx.guild.id].append([track, info["title"]])
-                    if not hide:
-                        await ctx.send(f'трек "{info["title"]}"- добавлен в очередь')
+                connect = await self.connect_channel(ctx)
             else:
-                if next:
-                    self.voices[ctx.guild.id].stop()
-                with YoutubeDL(self.YDL_OPTIONS) as ydl:
-                    info = ydl.extract_info(track, download=False)
-                if 'entries' in info:
-                    self.track[ctx.guild.id] = [f'https://www.youtube.com/watch?v={info["entries"][0]["id"]}',
-                                                info["entries"][0]["title"]]
-                    for i in info['entries'][1:]:
-                        self.queue[ctx.guild.id].append([f'https://www.youtube.com/watch?v={i["id"]}', i["title"]])
-                    await ctx.send(f'{info["entries"][0]["title"]} был включен\n'
-                                   f'{len(info["entries"]) - 1} треков было добавлено в очередь')
-                    URL = info["entries"][0]['formats'][0]['url']
-                    self.voices[ctx.guild.id].play(FFmpegPCMAudio(executable="/FFmpeg/bin/ffmpeg.exe",
-                                                                  source=URL, **self.FFMPEG_OPTIONS))
+                connect = True
+        except Exception:
+            connect = await self.connect_channel(ctx)
+        if connect:
+            if len(track) == 1 and 'https://www.youtube.com/watch' in track[0]:
+                track = track[0]
+                if self.voices[ctx.guild.id].is_playing() and not next:
+                    with YoutubeDL(self.YDL_OPTIONS) as ydl:
+                        info = ydl.extract_info(track, download=False)
+                    if 'entries' in info:
+                        for i in info['entries']:
+                            self.queue[ctx.guild.id].append([f'https://www.youtube.com/watch?v={i["id"]}', i["title"]])
+                        await ctx.send(f'{len(info["entries"])} треков было добавлено в очередь')
+                    else:
+                        self.queue[ctx.guild.id].append([track, info["title"]])
+                        if not hide:
+                            await ctx.send(f'трек "{info["title"]}"- добавлен в очередь')
                 else:
-                    self.track[ctx.guild.id] = [track, info["title"]]
-                    URL = info['formats'][0]['url']
-                    self.voices[ctx.guild.id].play(FFmpegPCMAudio(executable="/FFmpeg/bin/ffmpeg.exe",
-                                                                  source=URL, **self.FFMPEG_OPTIONS))
-                while self.voices[ctx.guild.id].is_playing():
-                    await sleep(1)
-                if not self.voices[ctx.guild.id].is_paused():
-                    await self.skip_channel_music(ctx, wo_text=True)
-        else:
-            URL = f"https://www.youtube.com/results?search_query={'+'.join(track)}"
-            driver = webdriver.Chrome(options=self.chrome_options)
-            driver.get(URL)
-            html = driver.page_source
-            soup = BeautifulSoup(html, "html.parser")
-            videos = soup.find_all("ytd-video-renderer", {"class": "style-scope ytd-item-section-renderer"})
-            out = 'Выберите трек командой "!#p<1-5>"'
-            self.play_choose[ctx.guild.id][ctx.message.author] = []
-            for i, video in enumerate(videos[:5]):
-                a = video.find("a", {"id": "thumbnail"})
-                text = video.find("yt-formatted-string", {"class": "style-scope ytd-video-renderer"})
-                name = text.get_text()
-                link = "https://www.youtube.com" + a.get("href")
-                self.play_choose[ctx.guild.id][ctx.message.author].append([name, link])
-                out += f'{i + 1} ---- {name}\n'
-            await ctx.send(out)
+                    if next:
+                        self.voices[ctx.guild.id].stop()
+                    with YoutubeDL(self.YDL_OPTIONS) as ydl:
+                        info = ydl.extract_info(track, download=False)
+                    if 'entries' in info:
+                        self.track[ctx.guild.id] = [f'https://www.youtube.com/watch?v={info["entries"][0]["id"]}',
+                                                    info["entries"][0]["title"]]
+                        for i in info['entries'][1:]:
+                            self.queue[ctx.guild.id].append([f'https://www.youtube.com/watch?v={i["id"]}', i["title"]])
+                        await ctx.send(f'{info["entries"][0]["title"]} был включен\n'
+                                       f'{len(info["entries"]) - 1} треков было добавлено в очередь')
+                        URL = info["entries"][0]['formats'][0]['url']
+                        self.voices[ctx.guild.id].play(FFmpegPCMAudio(executable="/FFmpeg/bin/ffmpeg.exe",
+                                                                      source=URL, **self.FFMPEG_OPTIONS))
+                    else:
+                        self.track[ctx.guild.id] = [track, info["title"]]
+                        URL = info['formats'][0]['url']
+                        self.voices[ctx.guild.id].play(FFmpegPCMAudio(executable="/FFmpeg/bin/ffmpeg.exe",
+                                                                      source=URL, **self.FFMPEG_OPTIONS))
+                    while self.voices[ctx.guild.id].is_playing():
+                        await sleep(1)
+                    if not self.voices[ctx.guild.id].is_paused():
+                        await self.skip_channel_music(ctx, wo_text=True)
+            else:
+                URL = f"https://www.youtube.com/results?search_query={'+'.join(track)}"
+                driver = webdriver.Chrome(options=self.chrome_options)
+                driver.get(URL)
+                html = driver.page_source
+                soup = BeautifulSoup(html, "html.parser")
+                videos = soup.find_all("ytd-video-renderer", {"class": "style-scope ytd-item-section-renderer"})
+                out = 'Выберите трек командой "!#p<1-5>"\n'
+                self.play_choose[ctx.guild.id][ctx.message.author] = []
+                for i, video in enumerate(videos[:5]):
+                    a = video.find("a", {"id": "thumbnail"})
+                    text = video.find("yt-formatted-string", {"class": "style-scope ytd-video-renderer"})
+                    name = text.get_text()
+                    link = "https://www.youtube.com" + a.get("href")
+                    self.play_choose[ctx.guild.id][ctx.message.author].append([name, link])
+                    out += f'{i + 1} ---- {name}\n'
+                await ctx.send(out)
 
     @commands.command(aliases=['1', 'p1'])
     async def play_track_choose1(self, ctx):
@@ -401,10 +392,12 @@ class MusicThings(commands.Cog):
                     num = int(num[0])
                     self.queue[ctx.guild.id] = self.queue[ctx.guild.id][num - 1:]
                     if self.queue[ctx.guild.id]:
+                        await ctx.send(f'Пропущено {num} треков')
                         await self.play_channel_music(ctx, self.queue[ctx.guild.id].pop(0)[0], next=True)
                     else:
                         self.track[ctx.guild.id] = []
                         self.voices[ctx.guild.id].stop()
+                        await ctx.send('Очередь осталась пуста, проигрывание остановлено')
             except Exception:
                 await ctx.reply('Число скипов в неправильном формате.')
         else:
@@ -421,6 +414,7 @@ class MusicThings(commands.Cog):
         if not self.started.get(ctx.guild.id):
             await self.start(ctx)
         self.queue[ctx.guild.id].clear()
+        await ctx.send('Очередь была удалена')
 
     @commands.command(name='clearall')
     async def clear_all(self, ctx, hide=False):
@@ -765,7 +759,7 @@ class MusicThings(commands.Cog):
             await ctx.send('Плейлиста с таким названием нету или, '
                            'возможно, вы хотели поставить лайк на плейлист сервера, но так я не умею')
 
-    async def get_serverid(self, ctx): # +
+    async def get_serverid(self, ctx):
         cur = self.con.cursor()
         id = cur.execute("SELECT id from discordservers WHERE serverid like ?", (ctx.guild.id, )).fetchall()
         if not id:
@@ -774,7 +768,7 @@ class MusicThings(commands.Cog):
         id = cur.execute("SELECT id from discordservers WHERE serverid like ?", (ctx.guild.id, )).fetchall()
         return id[0][0]
 
-    async def checkname(self, id, name, author=False, world=False): # +
+    async def checkname(self, id, name, author=False, world=False):
         cur = self.con.cursor()
         if author:
             name = cur.execute("""SELECT name from discordplaylists WHERE idserver like ? and name like ? and
@@ -833,6 +827,8 @@ async def send_help(ctx, *name):
                             ' или "!#<1-5>', inline=False)
         emb.add_field(name='!#skip <кол-во>', value='пропускает выбранное кол-во треков, если количество не указано,'
                                                     ' бот выключает текущий трек и включает следующий', inline=False)
+        emb.add_field(name='!#pause', value='Останавливает проигравание музыки', inline=False)
+        emb.add_field(name='!#resume', value='Выключает паузу', inline=False)
         emb.add_field(name='!#clearqueue', value='полностью удаляет очередь треков', inline=False)
         emb.add_field(name='!#clearall', value='удаляет очередь треков и выключает текущий', inline=False)
 
@@ -891,10 +887,13 @@ async def send_help(ctx, *name):
         await ctx.send(embed=emb)
 
 
-"""@bot.event
+@bot.event
 async def on_message(message):
+    if message.guild:
+        await bot.process_commands(message)
+    else:
+        await message.author.send("Я работаю только на серверах")
 
-    await bot.process_commands(message)"""  # проверка что это сообщения на сервере, а не в лс
 
 bot.add_cog(AllThings(bot))
 bot.add_cog(WeatherThings(bot))
