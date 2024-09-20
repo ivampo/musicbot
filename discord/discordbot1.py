@@ -21,7 +21,7 @@ from selenium.webdriver.chrome.options import Options
 
 load_dotenv()
 bot = Bot(command_prefix='!#')
-TOKEN = getenv('BOT_TOKEN')
+TOKEN = getenv('BOT_TOKEN') #kek
 if not TOKEN:
     exit('Error: no token provided')
 dashes = ['\u2680', '\u2681', '\u2682', '\u2683', '\u2684', '\u2685']
